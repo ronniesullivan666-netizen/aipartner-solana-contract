@@ -14,12 +14,24 @@ hashbrown = "=0.14.5"
 block-buffer = "=0.10.4"
 cpufeatures = "=0.2.12"
 crypto-common = "=0.1.6"
-anchor-lang = "0.31.1"
-anchor-spl = "0.31.1"
-
+anchor-lang = "0.31.2"
+anchor-spl = "0.31.2"
+solana-program = "=2.1.14"
 
 [profile.release]
 overflow-checks = false
 lto = "fat"
 codegen-units = 1
 opt-level = "z"
+
+
+
+
+
+
+
+[patch.crates-io]
+blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.5.5" }
+
+[patch.crates-io]
+blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.5.5" }
