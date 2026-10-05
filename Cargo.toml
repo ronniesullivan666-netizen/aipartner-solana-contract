@@ -10,7 +10,7 @@ rust-version = "1.89.0"
 
 [workspace.dependencies]
 indexmap = "2.13.0"
-hashbrown = "=0.16.1"
+hashbrown = "=0.14.5"
 block-buffer = "=0.10.4"
 cpufeatures = "=0.2.17"
 crypto-common = "=0.1.7"
