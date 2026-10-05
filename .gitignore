@@ -17,3 +17,10 @@ test-ledger
 .env
 .env.*
 *.keypair
+
+# 忽略本地私钥及敏感配置文件
+*.json
+!package.json
+!tsconfig.json
+id.json
+.env
