@@ -6,3 +6,14 @@ node_modules
 test-ledger
 .yarn
 .surfpool
+
+# 隐私与密钥屏蔽
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!Anchor.toml
+!.oxlintrc.json
+.env
+.env.*
+*.keypair
