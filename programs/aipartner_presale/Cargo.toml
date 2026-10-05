@@ -20,8 +20,3 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
 
-[profile.release]
-overflow-checks = true
-lto = "fat"
-codegen-units = 1
-opt-level = 3

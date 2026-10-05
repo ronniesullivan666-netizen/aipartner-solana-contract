@@ -17,19 +17,9 @@ crypto-common = "=0.1.6"
 anchor-lang = "0.31.1"
 anchor-spl = "0.31.1"
 
+
 [profile.release]
 overflow-checks = false
-opt-level = "z"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
-strip = true
-
-[profile.release.build-override]
-opt-level = 3
-incremental = false
-codegen-units = 1
-
-[provider]
-cluster = "https://mainnet.helius-rpc.com/?api-key=37673d77-fa71-41d2-9572-b8d4defa5cee"
-wallet = "/root/.config/solana/id.json"
+opt-level = "z"
