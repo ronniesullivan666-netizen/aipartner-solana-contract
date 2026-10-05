@@ -9,11 +9,11 @@ edition = "2021"
 rust-version = "1.89.0"
 
 [workspace.dependencies]
-indexmap = "=2.2.6"
-hashbrown = "=0.14.5"
+indexmap = "2.13.0"
+hashbrown = "=0.16.1"
 block-buffer = "=0.10.4"
-cpufeatures = "=0.2.12"
-crypto-common = "=0.1.6"
+cpufeatures = "=0.2.17"
+crypto-common = "=0.1.7"
 anchor-lang = "0.31.2"
 anchor-spl = "0.31.2"
 solana-program = "=2.1.14"
@@ -24,16 +24,7 @@ lto = "fat"
 codegen-units = 1
 opt-level = "z"
 
-
-
-
-
-
-
-
 [patch.crates-io]
 blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.5.5" }
-
-[patch.crates-io]
 zeroize = { version = "=1.7.0" }
 zeroize_derive = { version = "=1.4.2" }
